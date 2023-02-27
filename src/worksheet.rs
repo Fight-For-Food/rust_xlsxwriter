@@ -516,6 +516,53 @@ impl Worksheet {
         self.name.clone()
     }
 
+    /// Write generic data to a cell.
+    ///
+    /// The `write()` method writes data that implements [`IntoExcelData`] to a
+    /// worksheet cell. Currently only [`str`] and numbers that convert into a
+    /// [`f64`] are supported. This will be extended in the next version to
+    /// cover all the other Excel types that are handled by the type specific
+    /// `write*()` methods.
+    ///
+    /// User can also use this method to write their own data types to Excel by
+    /// implementing the [`IntoExcelData`] trait.
+    ///
+    pub fn write<T>(
+        &mut self,
+        row: RowNum,
+        col: ColNum,
+        data: T,
+    ) -> Result<&mut Worksheet, XlsxError>
+    where
+        T: IntoExcelData,
+    {
+        data.write(self, row, col)
+    }
+
+    /// Write formatted generic data to a cell.
+    ///
+    /// The `write_with_format()` method writes formatted data that implements
+    /// [`IntoExcelData`] to a worksheet cell. Currently only [`str`] and
+    /// numbers that convert into a [`f64`] are supported. This will be extended
+    /// in the next version to cover all the other Excel types that are handled
+    /// by the type specific `write*()` methods.
+    ///
+    /// User can also use this method to write their own data types to Excel by
+    /// implementing the [`IntoExcelData`] trait.
+    ///
+    pub fn write_with_format<'a, T>(
+        &'a mut self,
+        row: RowNum,
+        col: ColNum,
+        data: T,
+        format: &'a Format,
+    ) -> Result<&mut Worksheet, XlsxError>
+    where
+        T: IntoExcelData,
+    {
+        data.write_with_format(self, row, col, format)
+    }
+
     /// Write an unformatted number to a cell.
     ///
     /// Write an unformatted number to a worksheet cell. To write a formatted
@@ -9296,6 +9343,78 @@ impl Worksheet {
         self.writer.xml_empty_tag_attr("brk", &attributes);
     }
 }
+
+// -----------------------------------------------------------------------
+// Traits
+// -----------------------------------------------------------------------
+
+/// Trait to map user defined types to one of the supported Excel native types.
+///
+pub trait IntoExcelData {
+    /// Trait method to handle writing an unformatted type to Excel.
+    fn write(
+        self,
+        worksheet: &mut Worksheet,
+        row: RowNum,
+        col: ColNum,
+    ) -> Result<&mut Worksheet, XlsxError>;
+
+    /// Trait method to handle writing a formatted type to Excel.
+    fn write_with_format<'a>(
+        self,
+        worksheet: &'a mut Worksheet,
+        row: RowNum,
+        col: ColNum,
+        format: &'a Format,
+    ) -> Result<&'a mut Worksheet, XlsxError>;
+}
+
+impl IntoExcelData for &str {
+    fn write(
+        self,
+        worksheet: &mut Worksheet,
+        row: RowNum,
+        col: ColNum,
+    ) -> Result<&mut Worksheet, XlsxError> {
+        worksheet.write_string(row, col, self)
+    }
+
+    fn write_with_format<'a>(
+        self,
+        worksheet: &'a mut Worksheet,
+        row: RowNum,
+        col: ColNum,
+        format: &'a Format,
+    ) -> Result<&'a mut Worksheet, XlsxError> {
+        worksheet.write_string_with_format(row, col, self, format)
+    }
+}
+
+macro_rules! num_trait_impl {
+    ($($t:ty)*) => ($(
+        impl IntoExcelData for $t {
+            fn write(
+                self,
+                worksheet: &mut Worksheet,
+                row: RowNum,
+                col: ColNum,
+            ) -> Result<&mut Worksheet, XlsxError> {
+                worksheet.write_number(row, col, self)
+            }
+
+            fn write_with_format<'a>(
+                self,
+                worksheet: &'a mut Worksheet,
+                row: RowNum,
+                col: ColNum,
+                format: &'a Format,
+            ) -> Result<&'a mut Worksheet, XlsxError> {
+                worksheet.write_number_with_format(row, col, self, format)
+            }
+        }
+    )*)
+}
+num_trait_impl!(u8 i8 u16 i16 u32 i32 f32 f64);
 
 // -----------------------------------------------------------------------
 // Helper enums/structs/functions.
